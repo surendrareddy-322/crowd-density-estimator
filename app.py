@@ -2,9 +2,16 @@ import streamlit as st
 import cv2
 import config
 from detector import CrowdDetector
+import database
+import time
+import tempfile
+import os
 
 # Page configuration
 st.set_page_config(page_title="Crowd Density App", layout="wide", page_icon="👥")
+
+# Initialize database
+database.init_db()
 
 # Cache resources so they aren't reloaded every time the user moves a slider
 @st.cache_resource
@@ -52,22 +59,37 @@ config.RISK_MEDIUM = st.sidebar.number_input("Medium Risk Threshold", min_value=
 config.RISK_HIGH = st.sidebar.number_input("High Risk Threshold", min_value=1, value=35)
 
 # Main UI layout
-col1, col2 = st.columns([3, 1])
+tab1, tab2 = st.tabs(["Live Monitor", "History Dashboard"])
 
-with col1:
-    st.subheader("Live Feed")
-    run_stream = st.checkbox("🟢 Start Stream", value=False)
-    frame_window = st.image([])
+with tab1:
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        st.subheader("Live Feed")
+        
+        # Deployment fallback: Allow uploading a video
+        uploaded_video = st.file_uploader("Or upload a video file (Cloud Deployment Fallback)", type=['mp4', 'avi', 'mov'])
+        
+        run_stream = st.checkbox("🟢 Start Stream", value=False)
+        frame_window = st.image([])
+    
+    with col2:
+        st.subheader("Live Metrics")
+        metric_placeholder = st.empty()
+    
+    detector = get_detector()
+    
+    # Use uploaded video if provided, else webcam
+    if uploaded_video is not None:
+        # Save to temp file
+        tfile = tempfile.NamedTemporaryFile(delete=False) 
+        tfile.write(uploaded_video.read())
+        camera = cv2.VideoCapture(tfile.name)
+    else:
+        camera = get_camera()
 
-with col2:
-    st.subheader("Live Metrics")
-    metric_placeholder = st.empty()
-
-detector = get_detector()
-camera = get_camera()
-
-# Process video loop
-if run_stream:
+    # Process video loop
+    if run_stream:
     if not camera.isOpened():
         st.error("Error: Could not access the webcam.")
     else:
@@ -93,6 +115,15 @@ if run_stream:
             # Display image
             frame_window.image(annotated_frame)
             
+            # Log to database every 5 seconds
+            current_time = time.time()
+            if 'last_log_time' not in st.session_state:
+                st.session_state['last_log_time'] = current_time
+                
+            if current_time - st.session_state['last_log_time'] >= 5:
+                database.log_detection(zone_count, total_detected, risk_level)
+                st.session_state['last_log_time'] = current_time
+            
             # Update metrics panel ONLY if they changed to stop blinking
             if zone_count != last_zone_count or total_detected != last_total_detected or risk_level != last_risk_level:
                 color_class = "NORMAL"
@@ -116,5 +147,25 @@ if run_stream:
                 last_zone_count = zone_count
                 last_total_detected = total_detected
                 last_risk_level = risk_level
-else:
-    st.info("Stream is currently stopped. Click 'Start Stream' to begin.")
+    else:
+        st.info("Stream is currently stopped. Click 'Start Stream' to begin.")
+
+with tab2:
+    st.header("📈 Historical Crowd Analytics")
+    st.markdown("View past crowd density trends below.")
+    
+    # Provide a refresh button
+    if st.button("🔄 Refresh Data"):
+        st.rerun()
+        
+    df = database.get_historical_data()
+    
+    if df.empty:
+        st.info("No historical data available yet. Start the stream to log data!")
+    else:
+        st.dataframe(df.sort_values(by="timestamp", ascending=False).head(100), use_container_width=True)
+        
+        st.subheader("Trend: Zone Count Over Time")
+        # Ensure timestamp is the index for a good line chart
+        df_chart = df.set_index('timestamp')
+        st.line_chart(df_chart[['zone_count', 'total_detected']])

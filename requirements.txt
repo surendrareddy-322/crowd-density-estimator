@@ -3,3 +3,5 @@ opencv-python==4.9.0.80
 numpy==1.26.4
 streamlit==1.32.2
 pandas==2.2.1
+twilio==336.0.0
+python-dotenv==1.0.1
