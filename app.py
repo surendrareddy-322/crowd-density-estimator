@@ -90,63 +90,63 @@ with tab1:
 
     # Process video loop
     if run_stream:
-    if not camera.isOpened():
-        st.error("Error: Could not access the webcam.")
-    else:
-        last_zone_count = -1
-        last_total_detected = -1
-        last_risk_level = ""
-        
-        while run_stream:
-            ret, frame = camera.read()
-            if not ret:
-                st.error("Failed to read from webcam.")
-                break
+        if not camera.isOpened():
+            st.error("Error: Could not access the webcam.")
+        else:
+            last_zone_count = -1
+            last_total_detected = -1
+            last_risk_level = ""
             
-            # Resize frame for performance
-            frame = cv2.resize(frame, (1024, 768))
-            
-            # Process frame
-            annotated_frame, zone_count, risk_level, total_detected = detector.process_frame(frame)
-            
-            # Convert BGR (OpenCV) to RGB (Streamlit)
-            annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
-            
-            # Display image
-            frame_window.image(annotated_frame)
-            
-            # Log to database every 5 seconds
-            current_time = time.time()
-            if 'last_log_time' not in st.session_state:
-                st.session_state['last_log_time'] = current_time
+            while run_stream:
+                ret, frame = camera.read()
+                if not ret:
+                    st.error("Failed to read from webcam.")
+                    break
                 
-            if current_time - st.session_state['last_log_time'] >= 5:
-                database.log_detection(zone_count, total_detected, risk_level)
-                st.session_state['last_log_time'] = current_time
-            
-            # Update metrics panel ONLY if they changed to stop blinking
-            if zone_count != last_zone_count or total_detected != last_total_detected or risk_level != last_risk_level:
-                color_class = "NORMAL"
-                if "LOW" in risk_level: color_class = "LOW"
-                elif "MEDIUM" in risk_level: color_class = "MEDIUM"
-                elif "HIGH" in risk_level: color_class = "HIGH"
+                # Resize frame for performance
+                frame = cv2.resize(frame, (1024, 768))
                 
-                metric_placeholder.markdown(f"""
-                    <div class="metric-box">
-                        <h3>Total Detected</h3>
-                        <h1>{total_detected}</h1>
-                        <hr>
-                        <h3>Zone Count</h3>
-                        <h1>{zone_count}</h1>
-                        <hr>
-                        <h3>Status</h3>
-                        <h2 class="risk-{color_class}">{risk_level}</h2>
-                    </div>
-                """, unsafe_allow_html=True)
+                # Process frame
+                annotated_frame, zone_count, risk_level, total_detected = detector.process_frame(frame)
                 
-                last_zone_count = zone_count
-                last_total_detected = total_detected
-                last_risk_level = risk_level
+                # Convert BGR (OpenCV) to RGB (Streamlit)
+                annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
+                
+                # Display image
+                frame_window.image(annotated_frame)
+                
+                # Log to database every 5 seconds
+                current_time = time.time()
+                if 'last_log_time' not in st.session_state:
+                    st.session_state['last_log_time'] = current_time
+                    
+                if current_time - st.session_state['last_log_time'] >= 5:
+                    database.log_detection(zone_count, total_detected, risk_level)
+                    st.session_state['last_log_time'] = current_time
+                
+                # Update metrics panel ONLY if they changed to stop blinking
+                if zone_count != last_zone_count or total_detected != last_total_detected or risk_level != last_risk_level:
+                    color_class = "NORMAL"
+                    if "LOW" in risk_level: color_class = "LOW"
+                    elif "MEDIUM" in risk_level: color_class = "MEDIUM"
+                    elif "HIGH" in risk_level: color_class = "HIGH"
+                    
+                    metric_placeholder.markdown(f"""
+                        <div class="metric-box">
+                            <h3>Total Detected</h3>
+                            <h1>{total_detected}</h1>
+                            <hr>
+                            <h3>Zone Count</h3>
+                            <h1>{zone_count}</h1>
+                            <hr>
+                            <h3>Status</h3>
+                            <h2 class="risk-{color_class}">{risk_level}</h2>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    last_zone_count = zone_count
+                    last_total_detected = total_detected
+                    last_risk_level = risk_level
     else:
         st.info("Stream is currently stopped. Click 'Start Stream' to begin.")
 

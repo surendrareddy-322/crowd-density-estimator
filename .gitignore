@@ -7,3 +7,4 @@ venv/
 output.jpg
 *.mp4
 *.avi
+crowd_data.db
